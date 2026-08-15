@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>勤怠エラー指導・改善シート作成＆管理アプリ</title>
+    <style>
+        :root {
+            --primary-color: #0066cc;
+            --primary-dark: #004999;
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --border-color: #cccccc;
+            --text-color: #333333;
+            --accent-red: #d9534f;
+            --accent-green: #28a745;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.4;
+            padding: 15px;
+        }
+
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 20px;
+        }
+
+        /* 左側操作パネル */
+        .input-panel {
+            background: var(--card-bg);
+            padding: 18px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            height: fit-content;
+            max-height: calc(100vh - 30px);
+            overflow-y: auto;
+        }
+
+        .panel-section {
+            margin-bottom: 16px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+        }
+
+        .panel-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        h2 {
+            font-size: 1.05rem;
+            color: var(--primary-color);
+            border-left: 4px solid var(--primary-color);
+            padding-left: 8px;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: bold;
+            margin-bottom: 3px;
+            color: #555;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 7px 9px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+        }
+
+        .row-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            margin-right: 6px;
+        }
+
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.2s;
+            margin-top: 6px;
+            font-size: 0.88rem;
+        }
+
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-primary:hover { background-color: var(--primary-dark); }
+        .btn-ai { background-color: var(--accent-green); color: white; }
+        .btn-ai:hover { background-color: #218838; }
+        .btn-print { background-color: #17a2b8; color: white; font-size: 0.95rem; padding: 10px; }
+        .btn-print:hover { background-color: #138496; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-secondary:hover { background-color: #5a6268; }
+
+        /* タブ切り替え */
+        .tab-menu {
+            display: flex;
+            border-bottom: 2px solid var(--primary-color);
+            margin-bottom: 12px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 8px;
+            background: #e9ecef;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: #555;
+            transition: background 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .right-panel {
+            display: flex;
+            justify-content: center;
+        }
+
+        /* A4印刷シート */
+        .a4-page {
+            width: 210mm;
+            height: 297mm; /* 1枚に固定収容 */
+            max-height: 297mm;
+            background: white;
+            padding: 10mm 12mm;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 9.5pt;
+            color: #111;
+            overflow: hidden;
+        }
+
+        .sheet-header {
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+        }
+
+        .sheet-header h1 {
+            font-size: 16pt;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+        }
+
+        .meta-table th, .meta-table td {
+            border: 1px solid #000;
+            padding: 4px 6px;
+            font-size: 9pt;
+        }
+
+        .meta-table th {
+            background-color: #f2f2f2;
+            width: 18%;
+            text-align: center;
+        }
+
+        .meta-table td { width: 32%; }
+
+        .section-box {
+            border: 1px solid #000;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+
+        .section-title {
+            background-color: #f2f2f2;
+            font-size: 9.5pt;
+            font-weight: bold;
+            padding: 3px 6px;
+            border-bottom: 1px solid #000;
+        }
+
+        .section-body {
+            padding: 6px 8px;
+            font-size: 9pt;
+        }
+
+        .error-list { margin-bottom: 4px; font-weight: bold; color: #c00; }
+        .feedback-list { list-style-type: square; padding-left: 16px; margin-top: 2px; }
+        .feedback-list li { margin-bottom: 2px; }
+
+        .stcon-container {
+            height: 140px;
+            border: 1px dashed #aaa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: #fafafa;
+        }
+
+        .stcon-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .stcon-placeholder { color: #888; font-size: 8.5pt; }
+
+        .summary-content { white-space: pre-wrap; line-height: 1.35; }
+
+        .rules-list { list-style: none; padding-left: 0; font-size: 8.5pt; }
+        .rules-list li { position: relative; padding-left: 12px; margin-bottom: 3px; line-height: 1.3; }
+        .rules-list li::before { content: "・"; position: absolute; left: 0; font-weight: bold; }
+
+        .sign-area { margin-top: 6px; display: flex; justify-content: flex-end; gap: 15px; }
+        .sign-box { border: 1px solid #000; width: 110px; height: 45px; text-align: center; font-size: 8pt; padding-top: 2px; }
+
+        /* 集計ダッシュボード */
+        .dashboard-container {
+            width: 100%;
+            background: white;
+            padding: 18px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 0.85rem;
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        .data-table th { background-color: #f1f3f5; font-weight: bold; }
+
+        .badge-err {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            font-weight: bold;
+        }
+
+        /* 印刷設定 */
+        @media print {
+            body { background: none; padding: 0; }
+            .input-panel, .tab-menu, .dashboard-container { display: none !important; }
+            .app-container { display: block; max-width: 100%; }
+            .right-panel { display: block; }
+            .a4-page { box-shadow: none; padding: 0; width: 100%; height: 297mm; max-height: 297mm; }
+            @page { size: A4 portrait; margin: 8mm 10mm; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- 左側：入力パネル -->
+    <div class="input-panel">
+        <div class="panel-section">
+            <h2>① 従業員の選択・登録</h2>
+            <div class="form-group">
+                <label for="employeeSelect">登録済み従業員から呼び出し</label>
+                <select id="employeeSelect" class="form-control" onchange="loadEmployeeData()">
+                    <option value="">-- 新規入力または選択 --</option>
+                </select>
+            </div>
+
+            <div class="row-2">
+                <div class="form-group">
+                    <label for="inputId">従業員番号</label>
+                    <input type="text" id="inputId" class="form-control" placeholder="123456">
+                </div>
+                <div class="form-group">
+                    <label for="inputName">氏名</label>
+                    <input type="text" id="inputName" class="form-control" placeholder="山田 太郎">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="inputStore">店舗名</label>
+                <input type="text" id="inputStore" class="form-control" value="ファミリーマート〇〇店">
+            </div>
+
+            <button type="button" class="btn btn-secondary" onclick="saveEmployeePrompt()">💾 従業員リストに登録/更新</button>
+        </div>
+
+        <div class="panel-section">
+            <h2>② 指導シート入力情報</h2>
+            <div class="form-group">
+                <label for="inputMonth">対象月</label>
+                <input type="month" id="inputMonth" class="form-control" value="2026-03">
+            </div>
+
+            <div class="form-group">
+                <label>発生エラー内容 (複数選択可)</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-item"><input type="checkbox" name="errType" value="scan_early"> 出勤スキャン遅れ/フライング</label>
+                    <label class="checkbox-item"><input type="checkbox" name="errType" value="scan_out"> 退勤スキャン時刻の不徹底</label>
+                    <label class="checkbox-item"><input type="checkbox" name="errType" value="handover"> 退勤時の引継ぎ遅れ・超過</label>
+                    <label class="checkbox-item"><input type="checkbox" name="errType" value="break"> 休憩時間の取得エラー・超過</label>
+                    <label class="checkbox-item"><input type="checkbox" name="errType" value="forget"> 打刻忘れ（出勤/退勤/休憩）</label>
+                    <label class="checkbox-item" style="color:#d9534f; font-weight:bold;"><input type="checkbox" name="errType" value="student_day_over"> 1日8時間超過(留学生)</label>
+                    <label class="checkbox-item" style="color:#d9534f; font-weight:bold;"><input type="checkbox" name="errType" value="student_week_over"> 週28時間超過(留学生)</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="imageUpload">ストコン画面写真アップロード</label>
+                <input type="file" id="imageUpload" class="form-control" accept="image/*">
+            </div>
+
+            <div class="form-group" style="background:#f8f9fa; padding:8px; border-radius:6px; border:1px solid #ddd;">
+                <label for="managerComment">💬 店長特記事項・補足メモ（総括に反映）</label>
+                <textarea id="managerComment" class="form-control" rows="2" placeholder="例：テスト期間中のシフト重複あり。今後は本人と事前調整を行う。"></textarea>
+            </div>
+
+            <div class="form-group" style="background:#eef7ff; padding:8px; border-radius:6px; border:1px solid #bce0fd;">
+                <label style="color:#004999; margin-bottom:4px; font-size:0.82rem; font-weight:bold;">🤖 AI総括文生成（履歴参照）</label>
+                <div class="row-2">
+                    <div class="form-group">
+                        <label for="lastMonthCount">当月エラー数</label>
+                        <input type="number" id="lastMonthCount" class="form-control" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="prevMonthCount">前月エラー数</label>
+                        <input type="number" id="prevMonthCount" class="form-control" value="0" min="0">
+                    </div>
+                </div>
+                <button type="button" class="btn btn-ai" onclick="generateAISummary()">AI総括文を作成・反映</button>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <button type="button" class="btn btn-primary" onclick="saveRecordHistory()">📝 この記録をデータ保存する</button>
+            <button type="button" class="btn btn-print" onclick="window.print()">🖨️ 指導シートを印刷 / PDF保存</button>
+        </div>
+    </div>
+
+    <!-- 右側：メインコンテンツ -->
+    <div>
+        <div class="tab-menu">
+            <button class="tab-btn active" onclick="switchTab('sheet')">📄 印刷プレビュー（指導シート）</button>
+            <button class="tab-btn" onclick="switchTab('dashboard')">📊 月次エラー集計・従業員リスト</button>
+        </div>
+
+        <!-- タブ1: A4印刷プレビュー -->
+        <div id="tabSheet" class="tab-content active right-panel">
+            <div class="a4-page">
+                <div>
+                    <div class="sheet-header">
+                        <h1>勤怠エラー改善指導シート</h1>
+                    </div>
+
+                    <table class="meta-table">
+                        <tr>
+                            <th>対象月</th>
+                            <td id="dispMonth">2026年03月度</td>
+                            <th>店舗名</th>
+                            <td id="dispStore">ファミリーマート〇〇店</td>
+                        </tr>
+                        <tr>
+                            <th>従業員番号</th>
+                            <td id="dispId">123456</td>
+                            <th>氏 名</th>
+                            <td id="dispName" style="font-weight:bold; font-size:10.5pt;">山田 太郎 殿</td>
+                        </tr>
+                    </table>
+
+                    <div class="section-box">
+                        <div class="section-title">【1】発生エラー内容およびフィードバック</div>
+                        <div class="section-body">
+                            <div class="error-list" id="dispErrorTypes">（選択されたエラーが表示されます）</div>
+                            <ul class="feedback-list" id="dispFeedback">
+                                <li>エラー項目を選択すると、定型指導文がここに自動表示されます。</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="section-box">
+                        <div class="section-title">【2】ストコン画面エビデンス（エラー記録）</div>
+                        <div class="section-body" style="padding: 4px;">
+                            <div class="stcon-container" id="stconContainer">
+                                <span class="stcon-placeholder">※ここにアップロードしたストコン画面の写真が表示されます</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-box">
+                        <div class="section-title">【3】状況総括および今後の改善について</div>
+                        <div class="section-body">
+                            <div class="summary-content" id="dispSummary">「AI総括文を作成・反映」ボタンを押すと、自動生成された総括テキストが表示されます。</div>
+                        </div>
+                    </div>
+
+                    <div class="section-box" style="border: 1.5px solid #333;">
+                        <div class="section-title" style="background:#e9ecef;">【4】店舗勤怠に関する基本ルール（厳守事項）</div>
+                        <div class="section-body">
+                            <ul class="rules-list">
+                                <li><strong>出勤スキャン：</strong>必ずシフト開始の<strong>5分前</strong>に行ってください。</li>
+                                <li><strong>退勤スキャン：</strong>必ずシフト終了時間の<strong>ちょうど（定時）</strong>に行ってください。</li>
+                                <li><strong>業務引継ぎ：</strong>シフト終了時間までに作業が終わらない場合は、終了時間までに確実に引継ぎを完了させてください。（※理想は5分前に全てのワークスケジュールを終了させること）</li>
+                                <li><strong>休憩時間：</strong>休憩時間に関するエラーが頻発・改善されない場合は、休憩の発生しないシフト時間帯への変更を検討します。</li>
+                                <li><strong>留学生勤怠制限：</strong>資格外活動許可の制限（1日8時間／週28時間以内、長期休業中除く）を厳守し、超過シフトの申請・勤務は一切禁止します。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="font-size: 8pt; color: #444; margin-top: 2px;">
+                        ※本指導シートの内容を確認し、上記の勤怠ルールを遵守して改善に努めることを誓約します。
+                    </div>
+                    <div class="sign-area">
+                        <div class="sign-box">店長確認印</div>
+                        <div class="sign-box">本人署名・捺印</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- タブ2: 集計ダッシュボード -->
+        <div id="tabDashboard" class="tab-content">
+            <div class="dashboard-container">
+                <h2>📊 月次勤怠エラー集計</h2>
+                <div style="margin-bottom: 12px;">
+                    <label>表示対象月: </label>
+                    <input type="month" id="filterMonth" value="2026-03" onchange="renderDashboard()">
+                </div>
+
+                <div class="row-2" style="margin-bottom: 16px;">
+                    <div style="background:#f8f9fa; padding:12px; border-radius:6px; border:1px solid #ddd; text-align:center;">
+                        <span style="font-size:0.85rem; color:#666;">今月の指導シート作成数</span>
+                        <div id="statTotalSheets" style="font-size:1.6rem; font-weight:bold; color:var(--primary-color);">0 件</div>
+                    </div>
+                    <div style="background:#f8f9fa; padding:12px; border-radius:6px; border:1px solid #ddd; text-align:center;">
+                        <span style="font-size:0.85rem; color:#666;">今月の総エラー発生数</span>
+                        <div id="statTotalErrors" style="font-size:1.6rem; font-weight:bold; color:var(--accent-red);">0 件</div>
+                    </div>
+                </div>
+
+                <h3>📋 対象月のエラー指導記録一覧</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>従業員番号</th>
+                            <th>氏名</th>
+                            <th>対象月</th>
+                            <th>エラー件数</th>
+                            <th>発生エラー項目</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTableBody">
+                        <tr><td colspan="5" style="text-align:center; color:#888;">記録がありません</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 style="margin-top:24px;">👥 登録従業員マスター一覧</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>従業員番号</th>
+                            <th>氏名</th>
+                            <th>所属店舗</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employeeMasterBody">
+                        <tr><td colspan="4" style="text-align:center; color:#888;">登録されている従業員はいません</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let employees = JSON.parse(localStorage.getItem('kintai_employees') || '[]');
+    let errorRecords = JSON.parse(localStorage.getItem('kintai_records') || '[]');
+
+    const feedbackData = {
+        scan_early: "出勤スキャンはシフト開始5分前に行うルールです。早すぎる打刻や直前の駆け込みスキャンにならないよう、5分前の準備完了を徹底してください。",
+        scan_out: "退勤スキャンはシフト終了時間ちょうどに行ってください。終了時間を過ぎてからの打刻や、勝手な残業は認められません。",
+        handover: "作業が終わらない場合でも終了時間までに確実に引継ぎを行ってください。理想は5分前に全ワークスケジュールを終わらせ、スムーズに引き渡すことです。",
+        break: "指定された休憩時間を正しく取得してください。休憩の未取得や時間超過が続く場合は、休憩の必要がないシフト枠への変更を検討せざるを得なくなります。",
+        forget: "出勤・退勤・休憩の打刻忘れは勤怠集計に大きな支障をきたします。退勤時にストコン画面および打刻確認を行う習慣を必ず身につけてください。",
+        student_day_over: "留学生の労務規定において「1日8時間」を超える勤務は法律違反となります。シフト申請時の確認および時間内の即時退勤を厳守してください。",
+        student_week_over: "資格外活動許可に基づく「週28時間上限」を超過しています。他店舗・他バイトとのダブルワークを含め厳密なスケジュール管理を行ってください。"
+    };
+
+    const errorNames = {
+        scan_early: "出勤スキャン遅れ/タイミング不良",
+        scan_out: "退勤スキャン時刻の不徹底",
+        handover: "退勤時の引継ぎ不備・終了時間超過",
+        break: "休憩時間の取得エラー・ルール違反",
+        forget: "打刻漏れ（出退勤・休憩）",
+        student_day_over: "1日8時間超過(留学生)",
+        student_week_over: "週28時間超過(留学生)"
+    };
+
+    window.onload = function() {
+        updateEmployeeSelect();
+        renderDashboard();
+    };
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        if(tabName === 'sheet') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('tabSheet').classList.add('active');
+        } else {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('tabDashboard').classList.add('active');
+            renderDashboard();
+        }
+    }
+
+    function updateEmployeeSelect() {
+        const select = document.getElementById('employeeSelect');
+        select.innerHTML = '<option value="">-- 新規入力または選択 --</option>';
+        employees.forEach(emp => {
+            const opt = document.createElement('option');
+            opt.value = emp.id;
+            opt.textContent = `[${emp.id}] ${emp.name} (${emp.store})`;
+            select.appendChild(opt);
+        });
+    }
+
+    function loadEmployeeData() {
+        const empId = document.getElementById('employeeSelect').value;
+        if(!empId) return;
+
+        const emp = employees.find(e => e.id === empId);
+        if(emp) {
+            document.getElementById('inputId').value = emp.id;
+            document.getElementById('inputName').value = emp.name;
+            document.getElementById('inputStore').value = emp.store;
+            
+            document.getElementById('dispId').textContent = emp.id;
+            document.getElementById('dispName').textContent = emp.name + ' 殿';
+            document.getElementById('dispStore').textContent = emp.store;
+
+            autoFillPreviousErrorCount(emp.id);
+        }
+    }
+
+    function saveEmployeePrompt() {
+        const id = document.getElementById('inputId').value.trim();
+        const name = document.getElementById('inputName').value.trim();
+        const store = document.getElementById('inputStore').value.trim();
+
+        if(!id || !name) {
+            alert('従業員番号と氏名を入力してください。');
+            return;
+        }
+
+        const existingIndex = employees.findIndex(e => e.id === id);
+
+        if(existingIndex !== -1) {
+            const confirmOverwrite = confirm(`従業員番号 [${id}] は既に登録されています。
+情報（氏名: ${name}, 店舗: ${store}）を上書きしますか？`);
+            if(confirmOverwrite) {
+                employees[existingIndex] = { id, name, store };
+                alert('従業員情報を上書き保存しました。');
+            } else {
+                return;
+            }
+        } else {
+            const confirmSave = confirm(`従業員 [${name}] さん（番号: ${id}）をリストに新規保存しますか？`);
+            if(confirmSave) {
+                employees.push({ id, name, store });
+                alert('従業員リストに新規追加しました。');
+            }
+        }
+
+        localStorage.setItem('kintai_employees', JSON.stringify(employees));
+        updateEmployeeSelect();
+        document.getElementById('employeeSelect').value = id;
+    }
+
+    function autoFillPreviousErrorCount(empId) {
+        const currentMonthVal = document.getElementById('inputMonth').value;
+        if(!currentMonthVal) return;
+
+        const d = new Date(currentMonthVal + "-01");
+        d.setMonth(d.getMonth() - 1);
+        const prevMonthStr = d.toISOString().slice(0, 7);
+
+        const prevRecord = errorRecords.find(r => r.empId === empId && r.month === prevMonthStr);
+        if(prevRecord) {
+            document.getElementById('prevMonthCount').value = prevRecord.errorCount;
+        } else {
+            document.getElementById('prevMonthCount').value = 0;
+        }
+    }
+
+    document.getElementById('inputMonth').addEventListener('input', function(e) {
+        const val = e.target.value;
+        if(val) {
+            const [y, m] = val.split('-');
+            document.getElementById('dispMonth').textContent = `${y}年${m}月度`;
+            const empId = document.getElementById('inputId').value;
+            if(empId) autoFillPreviousErrorCount(empId);
+        }
+    });
+
+    document.getElementById('inputStore').addEventListener('input', function(e) {
+        document.getElementById('dispStore').textContent = e.target.value || 'ー';
+    });
+
+    document.getElementById('inputName').addEventListener('input', function(e) {
+        document.getElementById('dispName').textContent = (e.target.value || '＿＿＿＿') + ' 殿';
+    });
+
+    document.getElementById('inputId').addEventListener('input', function(e) {
+        document.getElementById('dispId').textContent = e.target.value || 'ー';
+    });
+
+    const checkboxes = document.querySelectorAll('input[name="errType"]');
+    checkboxes.forEach(cb => cb.addEventListener('change', updateErrorAndFeedback));
+
+    function updateErrorAndFeedback() {
+        const selected = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
+        const errContainer = document.getElementById('dispErrorTypes');
+        const fbContainer = document.getElementById('dispFeedback');
+
+        document.getElementById('lastMonthCount').value = selected.length;
+
+        if (selected.length === 0) {
+            errContainer.textContent = "（選択されたエラーが表示されます）";
+            fbContainer.innerHTML = "<li>エラー項目を選択すると、定型指導文がここに自動表示されます。</li>";
+            return;
+        }
+
+        errContainer.textContent = "対象エラー： " + selected.map(k => errorNames[k]).join(' / ');
+        fbContainer.innerHTML = "";
+        selected.forEach(k => {
+            const li = document.createElement('li');
+            li.textContent = feedbackData[k];
+            fbContainer.appendChild(li);
+        });
+    }
+
+    document.getElementById('imageUpload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                document.getElementById('stconContainer').innerHTML = `<img src="${evt.target.result}" alt="ストコン画面">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function generateAISummary() {
+        const cur = parseInt(document.getElementById('lastMonthCount').value) || 0;
+        const prev = parseInt(document.getElementById('prevMonthCount').value) || 0;
+        const comment = document.getElementById('managerComment').value.trim();
+
+        let diffText = "";
+        if (cur < prev) {
+            diffText = `前月（${prev}件）から当月は${cur}件へと改善傾向が見られますが、依然としてエラーが発生しています。`;
+        } else if (cur > prev) {
+            diffText = `前月（${prev}件）から当月は${cur}件へ増加しており、改善が見られず悪化傾向にあります。`;
+        } else {
+            diffText = `前月（${prev}件）と同数の${cur}件のエラーが発生しており、意識の停滞が見受けられます。`;
+        }
+
+        let commentBlock = "";
+        if (comment) {
+            commentBlock = `
+【店舗状況・補足事項】${comment}`;
+        }
+
+        const text = `【①前月結果】当月の勤怠エラー件数は「 ${cur}件 」でした。
+【②改善度評価】${diffText}${commentBlock}
+【③次月目標】来月は勤怠エラー「 0件 」を絶対目標とし、打刻・労働時間ルールの厳守を徹底してください。
+【④注意事項】万が一、次月以降も同様の勤怠エラーが改善されない場合、店長・社員による個別面談を実施のうえ、社内規定に基づきシフト調整や評価・ペナルティの対象となる場合がありますので、十分注意して業務に臨んでください。`;
+
+        document.getElementById('dispSummary').textContent = text;
+    }
+
+    function saveRecordHistory() {
+        const empId = document.getElementById('inputId').value;
+        const empName = document.getElementById('inputName').value;
+        const month = document.getElementById('inputMonth').value;
+        const selectedErrs = Array.from(checkboxes).filter(c => c.checked).map(c => errorNames[c.value]);
+        const curCount = parseInt(document.getElementById('lastMonthCount').value) || selectedErrs.length;
+
+        if(!empId || !empName) {
+            alert('従業員を選択・指定してから保存してください。');
+            return;
+        }
+
+        const recIndex = errorRecords.findIndex(r => r.empId === empId && r.month === month);
+        const recordData = {
+            empId,
+            empName,
+            month,
+            errorCount: curCount,
+            errors: selectedErrs,
+            updatedAt: new Date().toLocaleDateString()
+        };
+
+        if(recIndex !== -1) {
+            if(confirm(`${month}度 の ${empName} さんの記録は既に存在します。上書き保存しますか？`)) {
+                errorRecords[recIndex] = recordData;
+                alert('指導記録を上書き保存しました。');
+            } else {
+                return;
+            }
+        } else {
+            errorRecords.push(recordData);
+            alert(`${month}度 の指導記録を保存しました！「月次エラー集計」タブで一覧確認できます。`);
+        }
+
+        localStorage.setItem('kintai_records', JSON.stringify(errorRecords));
+        
+        if(!employees.some(e => e.id === empId)) {
+            saveEmployeePrompt();
+        }
+    }
+
+    function renderDashboard() {
+        const filterM = document.getElementById('filterMonth').value;
+        const filteredRecords = errorRecords.filter(r => r.month === filterM);
+
+        document.getElementById('statTotalSheets').textContent = `${filteredRecords.length} 件`;
+        const totalErrs = filteredRecords.reduce((sum, r) => sum + r.errorCount, 0);
+        document.getElementById('statTotalErrors').textContent = `${totalErrs} 件`;
+
+        const recBody = document.getElementById('recordsTableBody');
+        if(filteredRecords.length === 0) {
+            recBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">この月の指導記録はまだ保存されていません</td></tr>';
+        } else {
+            recBody.innerHTML = filteredRecords.map(r => `
+                <tr>
+                    <td>${r.empId}</td>
+                    <td><strong>${r.empName}</strong></td>
+                    <td>${r.month}</td>
+                    <td><span class="badge-err">${r.errorCount} 件</span></td>
+                    <td>${r.errors.join(' / ') || 'なし'}</td>
+                </tr>
+            `).join('');
+        }
+
+        const empBody = document.getElementById('employeeMasterBody');
+        if(employees.length === 0) {
+            empBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">登録されている従業員はいません</td></tr>';
+        } else {
+            empBody.innerHTML = employees.map(e => `
+                <tr>
+                    <td>${e.id}</td>
+                    <td><strong>${e.name}</strong></td>
+                    <td>${e.store}</td>
+                    <td><button onclick="deleteEmployee('${e.id}')" style="color:red; border:none; background:none; cursor:pointer;">削除</button></td>
+                </tr>
+            `).join('');
+        }
+    }
+
+    function deleteEmployee(id) {
+        if(confirm(`従業員番号 [${id}] をマスターから削除しますか？`)) {
+            employees = employees.filter(e => e.id !== id);
+            localStorage.setItem('kintai_employees', JSON.stringify(employees));
+            updateEmployeeSelect();
+            renderDashboard();
+        }
+    }
+
+    generateAISummary();
+</script>
+
+</body>
+</html>
