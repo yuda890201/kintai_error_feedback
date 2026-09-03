@@ -333,6 +333,8 @@
 </head>
 <body>
 
+<div id="connStatus" style="max-width:1400px;margin:0 auto 10px;padding:6px 12px;border-radius:6px;font-size:0.8rem;font-weight:bold;text-align:center;background:#fff3cd;color:#856404;border:1px solid #ffeeba;">Firebaseに接続中...</div>
+
 <div class="app-container">
     <!-- 左側：入力パネル -->
     <div class="input-panel">
@@ -553,9 +555,100 @@
     </div>
 </div>
 
-<script>
-    let employees = JSON.parse(localStorage.getItem('kintai_employees') || '[]');
-    let errorRecords = JSON.parse(localStorage.getItem('kintai_records') || '[]');
+<script type="module">
+    const firebaseConfig = {
+        apiKey: "AIzaSyCCvnyDKUR6IWwIeDY5pyMqz3r79dWiMQw",
+        authDomain: "kintai-error-feedback.firebaseapp.com",
+        projectId: "kintai-error-feedback",
+        storageBucket: "kintai-error-feedback.firebasestorage.app",
+        messagingSenderId: "404522784184",
+        appId: "1:404522784184:web:d0d27d15e5d5e579f9eb4d"
+    };
+
+    // Firebase SDKはCDNから動的読み込みする（読み込み失敗時もシート作成・印刷など
+    // オフラインで完結する機能はそのまま使えるようにするため）。
+    // ※Storageは無料(Spark)プランでは使えないため、ストコン画面の写真は
+    //   縮小・圧縮してFirestoreドキュメント内にBase64で保存する。
+    let db = null, auth = null;
+    let collection, doc, setDoc, deleteDoc, onSnapshot, signInAnonymously;
+
+    function setConnStatus(text, ok) {
+        const el = document.getElementById('connStatus');
+        el.textContent = text;
+        if (ok === true) {
+            el.style.background = '#d4edda';
+            el.style.color = '#155724';
+            el.style.borderColor = '#c3e6cb';
+        } else if (ok === false) {
+            el.style.background = '#f8d7da';
+            el.style.color = '#721c24';
+            el.style.borderColor = '#f5c6cb';
+        } else {
+            el.style.background = '#fff3cd';
+            el.style.color = '#856404';
+            el.style.borderColor = '#ffeeba';
+        }
+    }
+
+    let employees = [];
+    let errorRecords = [];
+    let pendingImageData = null;
+
+    function subscribeToData() {
+        onSnapshot(collection(db, "employees"), (snapshot) => {
+            employees = snapshot.docs.map(d => d.data());
+            updateEmployeeSelect();
+            renderDashboard();
+        }, (err) => {
+            console.error(err);
+            setConnStatus('⚠ 従業員データの取得に失敗しました: ' + err.message, false);
+        });
+
+        onSnapshot(collection(db, "records"), (snapshot) => {
+            errorRecords = snapshot.docs.map(d => d.data());
+            renderDashboard();
+        }, (err) => {
+            console.error(err);
+            setConnStatus('⚠ 指導記録の取得に失敗しました: ' + err.message, false);
+        });
+    }
+
+    async function initFirebase() {
+        if (firebaseConfig.apiKey.startsWith('YOUR_')) {
+            setConnStatus('⚠ Firebase未設定：index.html内のfirebaseConfigを自分のプロジェクトの値に書き換えてください（README.md参照）', false);
+            return;
+        }
+
+        try {
+            const [{ initializeApp }, fsMod, authMod] = await Promise.all([
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js"),
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js"),
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js")
+            ]);
+
+            ({ collection, doc, setDoc, deleteDoc, onSnapshot } = fsMod);
+            ({ signInAnonymously } = authMod);
+
+            const firebaseApp = initializeApp(firebaseConfig);
+            db = fsMod.getFirestore(firebaseApp);
+            auth = authMod.getAuth(firebaseApp);
+
+            authMod.onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    setConnStatus('✅ Firebaseに接続済み', true);
+                    subscribeToData();
+                }
+            });
+
+            await signInAnonymously(auth);
+        } catch (err) {
+            console.error(err);
+            db = null;
+            setConnStatus('⚠ Firebaseへの接続に失敗しました（シート作成・印刷はオフラインでも利用できます）: ' + err.message, false);
+        }
+    }
+
+    initFirebase();
 
     const feedbackData = {
         scan_early: "出勤スキャンはシフト開始5分前に行うルールです。早すぎる打刻や直前の駆け込みスキャンにならないよう、5分前の準備完了を徹底してください。",
@@ -575,11 +668,6 @@
         forget: "打刻漏れ（出退勤・休憩）",
         student_day_over: "1日8時間超過(留学生)",
         student_week_over: "週28時間超過(留学生)"
-    };
-
-    window.onload = function() {
-        updateEmployeeSelect();
-        renderDashboard();
     };
 
     function switchTab(tabName) {
@@ -625,7 +713,11 @@
         }
     }
 
-    function saveEmployeePrompt() {
+    async function saveEmployeePrompt() {
+        if (!db) {
+            alert('Firebaseに接続されていないため、従業員情報を保存できません。接続状況を確認してください。');
+            return;
+        }
         const id = document.getElementById('inputId').value.trim();
         const name = document.getElementById('inputName').value.trim();
         const store = document.getElementById('inputStore').value.trim();
@@ -640,23 +732,20 @@
         if(existingIndex !== -1) {
             const confirmOverwrite = confirm(`従業員番号 [${id}] は既に登録されています。
 情報（氏名: ${name}, 店舗: ${store}）を上書きしますか？`);
-            if(confirmOverwrite) {
-                employees[existingIndex] = { id, name, store };
-                alert('従業員情報を上書き保存しました。');
-            } else {
-                return;
-            }
+            if(!confirmOverwrite) return;
         } else {
             const confirmSave = confirm(`従業員 [${name}] さん（番号: ${id}）をリストに新規保存しますか？`);
-            if(confirmSave) {
-                employees.push({ id, name, store });
-                alert('従業員リストに新規追加しました。');
-            }
+            if(!confirmSave) return;
         }
 
-        localStorage.setItem('kintai_employees', JSON.stringify(employees));
-        updateEmployeeSelect();
-        document.getElementById('employeeSelect').value = id;
+        try {
+            await setDoc(doc(db, "employees", id), { id, name, store });
+            alert(existingIndex !== -1 ? '従業員情報を上書き保存しました。' : '従業員リストに新規追加しました。');
+            document.getElementById('employeeSelect').value = id;
+        } catch (err) {
+            console.error(err);
+            alert('従業員情報の保存に失敗しました: ' + err.message);
+        }
     }
 
     function autoFillPreviousErrorCount(empId) {
@@ -722,14 +811,50 @@
         });
     }
 
-    document.getElementById('imageUpload').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                document.getElementById('stconContainer').innerHTML = `<img src="${evt.target.result}" alt="ストコン画面">`;
+    function resizeImageToDataUrl(file, maxDim, quality) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round(height * maxDim / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round(width * maxDim / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
             };
+            img.onerror = reject;
+            const reader = new FileReader();
+            reader.onload = (evt) => { img.src = evt.target.result; };
+            reader.onerror = reject;
             reader.readAsDataURL(file);
+        });
+    }
+
+    document.getElementById('imageUpload').addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const dataUrl = await resizeImageToDataUrl(file, 1000, 0.7);
+            const approxKB = Math.round(dataUrl.length * 3 / 4 / 1024);
+            if (approxKB > 700) {
+                alert(`画像サイズが大きすぎます（約${approxKB}KB）。別の画像を選択するか、画面キャプチャの範囲を狭くしてください。`);
+                e.target.value = '';
+                return;
+            }
+            pendingImageData = dataUrl;
+            document.getElementById('stconContainer').innerHTML = `<img src="${dataUrl}" alt="ストコン画面">`;
+        } catch (err) {
+            console.error(err);
+            alert('画像の読み込みに失敗しました: ' + err.message);
         }
     });
 
@@ -761,45 +886,63 @@
         document.getElementById('dispSummary').textContent = text;
     }
 
-    function saveRecordHistory() {
+    async function saveRecordHistory() {
+        if (!db) {
+            alert('Firebaseに接続されていないため、指導記録を保存できません。接続状況を確認してください。');
+            return;
+        }
         const empId = document.getElementById('inputId').value;
         const empName = document.getElementById('inputName').value;
         const month = document.getElementById('inputMonth').value;
         const selectedErrs = Array.from(checkboxes).filter(c => c.checked).map(c => errorNames[c.value]);
         const curCount = parseInt(document.getElementById('lastMonthCount').value) || selectedErrs.length;
 
-        if(!empId || !empName) {
-            alert('従業員を選択・指定してから保存してください。');
+        if(!empId || !empName || !month) {
+            alert('従業員および対象月を選択・指定してから保存してください。');
             return;
         }
 
-        const recIndex = errorRecords.findIndex(r => r.empId === empId && r.month === month);
+        const recordId = `${empId}_${month}`;
+        const existing = errorRecords.find(r => r.empId === empId && r.month === month);
+
+        if(existing) {
+            if(!confirm(`${month}度 の ${empName} さんの記録は既に存在します。上書き保存しますか？`)) {
+                return;
+            }
+        }
+
+        // Storageは使わず、縮小・圧縮した画像をFirestoreドキュメントに直接埋め込む
+        const imageData = pendingImageData || (existing ? (existing.imageData || null) : null);
+
         const recordData = {
             empId,
             empName,
             month,
             errorCount: curCount,
             errors: selectedErrs,
+            imageData,
             updatedAt: new Date().toLocaleDateString()
         };
 
-        if(recIndex !== -1) {
-            if(confirm(`${month}度 の ${empName} さんの記録は既に存在します。上書き保存しますか？`)) {
-                errorRecords[recIndex] = recordData;
-                alert('指導記録を上書き保存しました。');
-            } else {
-                return;
-            }
-        } else {
-            errorRecords.push(recordData);
-            alert(`${month}度 の指導記録を保存しました！「月次エラー集計」タブで一覧確認できます。`);
+        try {
+            await setDoc(doc(db, "records", recordId), recordData);
+            pendingImageData = null;
+            alert(existing ? '指導記録を上書き保存しました。' : `${month}度 の指導記録を保存しました！「月次エラー集計」タブで一覧確認できます。`);
+        } catch (err) {
+            console.error(err);
+            alert('指導記録の保存に失敗しました（画像サイズが大きすぎる可能性があります）: ' + err.message);
+            return;
         }
 
-        localStorage.setItem('kintai_records', JSON.stringify(errorRecords));
-        
         if(!employees.some(e => e.id === empId)) {
-            saveEmployeePrompt();
+            await saveEmployeePrompt();
         }
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
     }
 
     function renderDashboard() {
@@ -816,11 +959,11 @@
         } else {
             recBody.innerHTML = filteredRecords.map(r => `
                 <tr>
-                    <td>${r.empId}</td>
-                    <td><strong>${r.empName}</strong></td>
-                    <td>${r.month}</td>
-                    <td><span class="badge-err">${r.errorCount} 件</span></td>
-                    <td>${r.errors.join(' / ') || 'なし'}</td>
+                    <td>${escapeHtml(r.empId)}</td>
+                    <td><strong>${escapeHtml(r.empName)}</strong></td>
+                    <td>${escapeHtml(r.month)}</td>
+                    <td><span class="badge-err">${escapeHtml(r.errorCount)} 件</span></td>
+                    <td>${escapeHtml((r.errors || []).join(' / ') || 'なし')}</td>
                 </tr>
             `).join('');
         }
@@ -831,25 +974,39 @@
         } else {
             empBody.innerHTML = employees.map(e => `
                 <tr>
-                    <td>${e.id}</td>
-                    <td><strong>${e.name}</strong></td>
-                    <td>${e.store}</td>
-                    <td><button onclick="deleteEmployee('${e.id}')" style="color:red; border:none; background:none; cursor:pointer;">削除</button></td>
+                    <td>${escapeHtml(e.id)}</td>
+                    <td><strong>${escapeHtml(e.name)}</strong></td>
+                    <td>${escapeHtml(e.store)}</td>
+                    <td><button onclick="deleteEmployee('${escapeHtml(e.id)}')" style="color:red; border:none; background:none; cursor:pointer;">削除</button></td>
                 </tr>
             `).join('');
         }
     }
 
-    function deleteEmployee(id) {
+    async function deleteEmployee(id) {
+        if (!db) {
+            alert('Firebaseに接続されていないため、削除できません。接続状況を確認してください。');
+            return;
+        }
         if(confirm(`従業員番号 [${id}] をマスターから削除しますか？`)) {
-            employees = employees.filter(e => e.id !== id);
-            localStorage.setItem('kintai_employees', JSON.stringify(employees));
-            updateEmployeeSelect();
-            renderDashboard();
+            try {
+                await deleteDoc(doc(db, "employees", id));
+            } catch (err) {
+                console.error(err);
+                alert('従業員の削除に失敗しました: ' + err.message);
+            }
         }
     }
 
     generateAISummary();
+
+    window.loadEmployeeData = loadEmployeeData;
+    window.saveEmployeePrompt = saveEmployeePrompt;
+    window.generateAISummary = generateAISummary;
+    window.saveRecordHistory = saveRecordHistory;
+    window.deleteEmployee = deleteEmployee;
+    window.switchTab = switchTab;
+    window.renderDashboard = renderDashboard;
 </script>
 
 </body>
