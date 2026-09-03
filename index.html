@@ -556,17 +556,14 @@
 </div>
 
 <script type="module">
-    // ▼▼▼ Firebase設定：Firebaseコンソール(https://console.firebase.google.com/)で作成した
-    //     自分のプロジェクトの「マイアプリ」設定値に書き換えてください ▼▼▼
     const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT_ID.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
+        apiKey: "AIzaSyCCvnyDKUR6IWwIeDY5pyMqz3r79dWiMQw",
+        authDomain: "kintai-error-feedback.firebaseapp.com",
+        projectId: "kintai-error-feedback",
+        storageBucket: "kintai-error-feedback.firebasestorage.app",
+        messagingSenderId: "404522784184",
+        appId: "1:404522784184:web:d0d27d15e5d5e579f9eb4d"
     };
-    // ▲▲▲ ここまで ▲▲▲
 
     // Firebase SDKはCDNから動的読み込みする（読み込み失敗時もシート作成・印刷など
     // オフラインで完結する機能はそのまま使えるようにするため）。
@@ -622,10 +619,10 @@
 
         try {
             const [{ initializeApp }, fsMod, stMod, authMod] = await Promise.all([
-                import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
-                import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),
-                import("https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js"),
-                import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js")
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js"),
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js"),
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js"),
+                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js")
             ]);
 
             ({ collection, doc, setDoc, deleteDoc, onSnapshot } = fsMod);
