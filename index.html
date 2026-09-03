@@ -567,8 +567,10 @@
 
     // Firebase SDKはCDNから動的読み込みする（読み込み失敗時もシート作成・印刷など
     // オフラインで完結する機能はそのまま使えるようにするため）。
-    let db = null, storage = null, auth = null;
-    let collection, doc, setDoc, deleteDoc, onSnapshot, ref, uploadBytes, getDownloadURL, signInAnonymously;
+    // ※Storageは無料(Spark)プランでは使えないため、ストコン画面の写真は
+    //   縮小・圧縮してFirestoreドキュメント内にBase64で保存する。
+    let db = null, auth = null;
+    let collection, doc, setDoc, deleteDoc, onSnapshot, signInAnonymously;
 
     function setConnStatus(text, ok) {
         const el = document.getElementById('connStatus');
@@ -590,7 +592,7 @@
 
     let employees = [];
     let errorRecords = [];
-    let pendingImageFile = null;
+    let pendingImageData = null;
 
     function subscribeToData() {
         onSnapshot(collection(db, "employees"), (snapshot) => {
@@ -618,20 +620,17 @@
         }
 
         try {
-            const [{ initializeApp }, fsMod, stMod, authMod] = await Promise.all([
+            const [{ initializeApp }, fsMod, authMod] = await Promise.all([
                 import("https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js"),
                 import("https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js"),
-                import("https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js"),
                 import("https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js")
             ]);
 
             ({ collection, doc, setDoc, deleteDoc, onSnapshot } = fsMod);
-            ({ ref, uploadBytes, getDownloadURL } = stMod);
             ({ signInAnonymously } = authMod);
 
             const firebaseApp = initializeApp(firebaseConfig);
             db = fsMod.getFirestore(firebaseApp);
-            storage = stMod.getStorage(firebaseApp);
             auth = authMod.getAuth(firebaseApp);
 
             authMod.onAuthStateChanged(auth, (user) => {
@@ -645,7 +644,6 @@
         } catch (err) {
             console.error(err);
             db = null;
-            storage = null;
             setConnStatus('⚠ Firebaseへの接続に失敗しました（シート作成・印刷はオフラインでも利用できます）: ' + err.message, false);
         }
     }
@@ -813,15 +811,50 @@
         });
     }
 
-    document.getElementById('imageUpload').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            pendingImageFile = file;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                document.getElementById('stconContainer').innerHTML = `<img src="${evt.target.result}" alt="ストコン画面">`;
+    function resizeImageToDataUrl(file, maxDim, quality) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round(height * maxDim / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round(width * maxDim / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
             };
+            img.onerror = reject;
+            const reader = new FileReader();
+            reader.onload = (evt) => { img.src = evt.target.result; };
+            reader.onerror = reject;
             reader.readAsDataURL(file);
+        });
+    }
+
+    document.getElementById('imageUpload').addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const dataUrl = await resizeImageToDataUrl(file, 1000, 0.7);
+            const approxKB = Math.round(dataUrl.length * 3 / 4 / 1024);
+            if (approxKB > 700) {
+                alert(`画像サイズが大きすぎます（約${approxKB}KB）。別の画像を選択するか、画面キャプチャの範囲を狭くしてください。`);
+                e.target.value = '';
+                return;
+            }
+            pendingImageData = dataUrl;
+            document.getElementById('stconContainer').innerHTML = `<img src="${dataUrl}" alt="ストコン画面">`;
+        } catch (err) {
+            console.error(err);
+            alert('画像の読み込みに失敗しました: ' + err.message);
         }
     });
 
@@ -878,18 +911,8 @@
             }
         }
 
-        let imageUrl = existing ? (existing.imageUrl || null) : null;
-
-        if(pendingImageFile) {
-            try {
-                const storageRef = ref(storage, `stcon/${recordId}_${Date.now()}`);
-                await uploadBytes(storageRef, pendingImageFile);
-                imageUrl = await getDownloadURL(storageRef);
-            } catch (err) {
-                console.error(err);
-                alert('ストコン画面画像のアップロードに失敗しました（保存は続行します）: ' + err.message);
-            }
-        }
+        // Storageは使わず、縮小・圧縮した画像をFirestoreドキュメントに直接埋め込む
+        const imageData = pendingImageData || (existing ? (existing.imageData || null) : null);
 
         const recordData = {
             empId,
@@ -897,17 +920,17 @@
             month,
             errorCount: curCount,
             errors: selectedErrs,
-            imageUrl,
+            imageData,
             updatedAt: new Date().toLocaleDateString()
         };
 
         try {
             await setDoc(doc(db, "records", recordId), recordData);
-            pendingImageFile = null;
+            pendingImageData = null;
             alert(existing ? '指導記録を上書き保存しました。' : `${month}度 の指導記録を保存しました！「月次エラー集計」タブで一覧確認できます。`);
         } catch (err) {
             console.error(err);
-            alert('指導記録の保存に失敗しました: ' + err.message);
+            alert('指導記録の保存に失敗しました（画像サイズが大きすぎる可能性があります）: ' + err.message);
             return;
         }
 

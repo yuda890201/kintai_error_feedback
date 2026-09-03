@@ -3,7 +3,11 @@
 勤怠エラー改善指導シート作成 & 集計アプリ（Firebase連携版）
 
 `index.html` を開くだけで動く単一ファイルのWebアプリです。従業員マスターと月次の勤怠エラー指導記録を
-Firebase（Firestore / Storage / Authentication）に保存するため、複数の店長・端末間でデータが自動的に同期されます。
+Firebase（Firestore / Authentication）に保存するため、複数の店長・端末間でデータが自動的に同期されます。
+
+ストコン画面の写真は、**無料（Sparkプラン）でも使えるように** Firebase Storageを使わず、ブラウザ側で
+縮小・圧縮したうえでFirestoreドキュメントに直接埋め込んで保存します（Storage自体はSparkプランでは
+利用できないため）。
 
 ## セットアップ手順
 
@@ -14,9 +18,10 @@ Firebase（Firestore / Storage / Authentication）に保存するため、複数
 
 ### 2. 各機能を有効化
 
-- **Authentication** → Sign-in method で「匿名」を有効化します（ログイン画面なしでFirestore/Storageにアクセスするため）。
+- **Authentication** → Sign-in method で「匿名」を有効化します（ログイン画面なしでFirestoreにアクセスするため）。
 - **Firestore Database** を作成します（本番環境モードで作成してOK。ルールは下記で設定）。
-- **Storage** を有効化します（ストコン画面の写真アップロード先）。
+
+Storageは使用しないため、有効化は不要です（無料のSparkプランのままでOK）。
 
 ### 3. `index.html` に設定を反映
 
@@ -52,24 +57,13 @@ service cloud.firestore {
 }
 ```
 
-**Storage ルール**
-
-```
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
-
 ## データ構造
 
 - `employees`（Firestoreコレクション、ドキュメントID = 従業員番号）: `{ id, name, store }`
-- `records`（Firestoreコレクション、ドキュメントID = `従業員番号_対象月`）: `{ empId, empName, month, errorCount, errors, imageUrl, updatedAt }`
-- ストコン画面の写真は Storage の `stcon/` 配下にアップロードされ、そのダウンロードURLが `records` の `imageUrl` に保存されます。
+- `records`（Firestoreコレクション、ドキュメントID = `従業員番号_対象月`）: `{ empId, empName, month, errorCount, errors, imageData, updatedAt }`
+- ストコン画面の写真は、アップロード時にブラウザ側で長辺1000px・JPEG品質0.7程度に縮小・圧縮し、
+  Base64のData URLとして `records` の `imageData` に保存します（Firestoreの1ドキュメント1MB制限内に収めるため、
+  圧縮後もおよそ700KBを超える場合はアップロードをブロックします）。
 
 ## 使い方
 
